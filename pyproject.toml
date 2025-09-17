@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "coordinate-parser"
-version = "0.1.0"
+version = "0.1.1"
 description = "A Python library for parsing geographic coordinates in various formats"
 readme = "README.md"
 license = "MIT"
