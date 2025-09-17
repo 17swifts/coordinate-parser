@@ -4,15 +4,16 @@
 [![PyPI version](https://badge.fury.io/py/coordinate-parser.svg)](https://badge.fury.io/py/coordinate-parser)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 
-A robust Python library for parsing geographic coordinates in various formats. This library can handle decimal degrees, degrees/minutes/seconds, and maritime coordinate formats with high precision.
+A robust Python library for parsing geographic coordinates in various formats. This library can handle decimal degrees, degrees/minutes/seconds, maritime coordinate formats, and UTM coordinates with high precision.
 
 ## Features
 
-- **Multiple format support**: Decimal degrees, degrees/minutes/seconds, maritime formats
+- **Multiple format support**: Decimal degrees, degrees/minutes/seconds, maritime formats, UTM coordinates
 - **Flexible input**: Accepts strings, floats, integers, and Decimal types
 - **Validation**: Optional coordinate validation with customizable ranges
 - **High precision**: Uses Python's Decimal type for accurate calculations
 - **Maritime formats**: Special support for nautical coordinate formats
+- **UTM support**: Universal Transverse Mercator coordinate parsing and conversion
 - **Internationalization**: Supports Cyrillic cardinal directions
 - **Error handling**: Comprehensive error messages for invalid inputs
 
@@ -25,7 +26,7 @@ pip install coordinate-parser
 ## Quick Start
 
 ```python
-from coordinate_parser import parse_coordinate
+from coordinate_parser import parse_coordinate, parse_utm_coordinate
 
 # Basic usage
 lat = parse_coordinate("40°41.65'N")
@@ -35,6 +36,10 @@ print(f"Latitude: {lat}, Longitude: {lon}")
 # Decimal degrees
 coord = parse_coordinate("23.43")
 print(f"Coordinate: {coord}")
+
+# UTM coordinates
+utm_lat, utm_lon = parse_utm_coordinate("33N 391545 5819698")
+print(f"UTM converted: {utm_lat}, {utm_lon}")
 
 # With validation
 lat = parse_coordinate("45.5", coord_type="latitude")
@@ -87,6 +92,54 @@ parse_coordinate("120°45.5'E")     # 120.758333333333
 parse_coordinate("30°34'24.0\"N")  # 30.573333333333
 ```
 
+### UTM Coordinates
+
+```python
+from coordinate_parser import parse_utm_coordinate, utm_to_latlon
+
+# Standard format
+lat, lon = parse_utm_coordinate("33N 391545 5819698")    # Berlin, Germany
+print(f"Berlin: {lat:.4f}°N, {lon:.4f}°E")
+
+# With "Zone" prefix
+lat, lon = parse_utm_coordinate("Zone 23K 332398 7395850")  # São Paulo, Brazil
+print(f"São Paulo: {lat:.4f}°S, {lon:.4f}°W")
+
+# Alternative spacing
+lat, lon = parse_utm_coordinate("33 N 391545 5819698")
+
+# Compact format
+lat, lon = parse_utm_coordinate("33N391545E5819698N")
+
+# Direct UTM to Lat/Lon conversion
+lat, lon = utm_to_latlon(33, 'N', 391545, 5819698)
+print(f"Direct conversion: {lat:.4f}°, {lon:.4f}°")
+
+# With validation (default: enabled)
+lat, lon = parse_utm_coordinate("33N 391545 5819698", validate=True)
+
+# Without validation
+lat, lon = parse_utm_coordinate("33N 391545 5819698", validate=False)
+
+# Parse individual coordinates from UTM
+from coordinate_parser import parse_utm_coordinate_single
+lat = parse_utm_coordinate_single("33N 391545 5819698", "latitude")
+lon = parse_utm_coordinate_single("33N 391545 5819698", "longitude")
+```
+
+**Supported UTM formats:**
+
+- `33N 391545 5819698` (standard format)
+- `Zone 33N 391545 5819698` (with "Zone" prefix)
+- `33 N 391545 5819698` (spaced zone letter)
+- `33N391545E5819698N` (compact format)
+
+**UTM Zone Coverage:**
+
+- Zone numbers: 1-60
+- Zone letters: C-W (excluding I and O)
+- Both northern and southern hemispheres
+
 ### International Support
 
 ```python
@@ -120,6 +173,82 @@ Parse a coordinate string and return a Decimal value in decimal degrees.
 **Raises:**
 
 - `ValueError`: If the coordinate cannot be parsed or is outside valid range
+
+### `parse_utm_coordinate(utm_string, validate=True)`
+
+Parse UTM coordinate string and return latitude/longitude.
+
+**Parameters:**
+
+- `utm_string` (str): UTM coordinate string (e.g., "33N 391545 5819698")
+- `validate` (bool): Whether to validate the resulting coordinates are within valid ranges
+
+**Returns:**
+
+- `Tuple[float, float] | None`: Tuple of (latitude, longitude) in decimal degrees, or None if parsing fails
+
+**Raises:**
+
+- `ValueError`: If validation is enabled and coordinates are outside valid ranges
+
+**Example:**
+
+```python
+lat, lon = parse_utm_coordinate("33N 391545 5819698")
+lat, lon = parse_utm_coordinate("33N 391545 5819698", validate=False)
+```
+
+### `utm_to_latlon(zone_number, zone_letter, easting, northing, validate=True)`
+
+Convert UTM coordinates to latitude/longitude.
+
+**Parameters:**
+
+- `zone_number` (int): UTM zone number (1-60)
+- `zone_letter` (str): UTM zone letter (C-W, excluding I and O)
+- `easting` (float): UTM easting coordinate in meters
+- `northing` (float): UTM northing coordinate in meters
+- `validate` (bool): Whether to validate the resulting coordinates are within valid ranges
+
+**Returns:**
+
+- `Tuple[float, float]`: Tuple of (latitude, longitude) in decimal degrees
+
+**Raises:**
+
+- `ValueError`: If UTM parameters are invalid or coordinates are outside valid ranges
+
+**Example:**
+
+```python
+lat, lon = utm_to_latlon(33, 'N', 391545, 5819698)
+lat, lon = utm_to_latlon(33, 'N', 391545, 5819698, validate=False)
+```
+
+### `parse_utm_coordinate_single(utm_string, coord_type="latitude", validate=True)`
+
+Parse UTM coordinate string and return a single coordinate (latitude or longitude).
+
+**Parameters:**
+
+- `utm_string` (str): UTM coordinate string (e.g., "33N 391545 5819698")
+- `coord_type` (str): Type of coordinate to return ('latitude' or 'longitude')
+- `validate` (bool): Whether to validate the coordinate is within valid ranges
+
+**Returns:**
+
+- `Decimal | None`: The requested coordinate in decimal degrees, or None if parsing fails
+
+**Raises:**
+
+- `ValueError`: If validation is enabled and coordinate is outside valid range
+
+**Example:**
+
+```python
+lat = parse_utm_coordinate_single("33N 391545 5819698", "latitude")
+lon = parse_utm_coordinate_single("33N 391545 5819698", "longitude")
+```
 
 ### `to_dec_deg(*args)`
 

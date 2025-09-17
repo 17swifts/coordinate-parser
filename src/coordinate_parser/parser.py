@@ -34,11 +34,227 @@ Maritime coordinate formats:
   54-05.48N, 162-29.03W (degree-dash-minutes without degree symbol)
   30°34.4'N (degree-minutes with degree symbol)
   30°34'24.0"N (degree-minutes-seconds)
+
+UTM coordinate formats:
+  33N 0594934 5810062 (zone letter, easting, northing)
+  Zone 18S 0377299 1483035 (with "Zone" prefix)
+  33 N 594934 5810062 (with spaces)
+  33N594934E5810062N (compact format)
 """
 
 import math
 import re
 from decimal import Decimal
+
+
+def utm_to_latlon(
+    zone_number: int,
+    zone_letter: str,
+    easting: float,
+    northing: float,
+    validate: bool = True,
+) -> tuple[float, float]:
+    """
+    Convert UTM coordinates to latitude/longitude.
+
+    Args:
+        zone_number: UTM zone number (1-60)
+        zone_letter: UTM zone letter (C-X, excluding I and O)
+        easting: UTM easting coordinate in meters
+        northing: UTM northing coordinate in meters
+        validate: Whether to validate the resulting coordinates are within valid ranges
+
+    Returns:
+        Tuple of (latitude, longitude) in decimal degrees
+
+    Raises:
+        ValueError: If UTM parameters are invalid or coordinates are outside valid
+            ranges
+    """
+    # Validate inputs
+    if not (1 <= zone_number <= 60):
+        raise ValueError(f"UTM zone number {zone_number} must be between 1 and 60")
+
+    zone_letter = zone_letter.upper()
+    valid_letters = "CDEFGHJKLMNPQRSTUVW"  # X is excluded (only goes to W)
+    if zone_letter not in valid_letters:
+        raise ValueError(f"UTM zone letter '{zone_letter}' is invalid")
+
+    # Determine if northern or southern hemisphere
+    northern = zone_letter >= "N"
+
+    # WGS84 ellipsoid parameters
+    a = 6378137.0  # Semi-major axis (meters)
+    e = 0.0818191908426215  # First eccentricity
+    e_sq = e * e  # e squared
+    e1_sq = e_sq / (1 - e_sq)  # e prime squared
+    k0 = 0.9996  # Scale factor
+
+    # Calculate central meridian longitude
+    lon_origin_deg = (zone_number - 1) * 6 - 180 + 3
+    lon_origin_rad = math.radians(lon_origin_deg)
+
+    # Remove false easting and northing
+    x = easting - 500000.0
+    if not northern:
+        y = northing - 10000000.0
+    else:
+        y = northing
+
+    # Calculate the meridional arc
+    M = y / k0
+
+    # Calculate the footprint latitude using series expansion
+    mu = M / (a * (1 - e_sq / 4 - 3 * e_sq**2 / 64 - 5 * e_sq**3 / 256))
+
+    e1 = (1 - math.sqrt(1 - e_sq)) / (1 + math.sqrt(1 - e_sq))
+    J1 = 3 * e1 / 2 - 27 * e1**3 / 32
+    J2 = 21 * e1**2 / 16 - 55 * e1**4 / 32
+    J3 = 151 * e1**3 / 96
+    J4 = 1097 * e1**4 / 512
+
+    fp = (
+        mu
+        + J1 * math.sin(2 * mu)
+        + J2 * math.sin(4 * mu)
+        + J3 * math.sin(6 * mu)
+        + J4 * math.sin(8 * mu)
+    )
+
+    # Calculate latitude and longitude
+    C1 = e1_sq * math.cos(fp) ** 2
+    T1 = math.tan(fp) ** 2
+    R1 = a * (1 - e_sq) / (1 - e_sq * math.sin(fp) ** 2) ** (3 / 2)
+    N1 = a / math.sqrt(1 - e_sq * math.sin(fp) ** 2)
+    D = x / (N1 * k0)
+
+    # Calculate latitude
+    Q1 = N1 * math.tan(fp) / R1
+    Q2 = D**2 / 2
+    Q3 = (5 + 3 * T1 + 10 * C1 - 4 * C1**2 - 9 * e1_sq) * D**4 / 24
+    Q4 = (61 + 90 * T1 + 298 * C1 + 45 * T1**2 - 252 * e1_sq - 3 * C1**2) * D**6 / 720
+
+    lat_rad = fp - Q1 * (Q2 - Q3 + Q4)
+
+    # Calculate longitude
+    Q5 = D
+    Q6 = (1 + 2 * T1 + C1) * D**3 / 6
+    Q7 = (5 - 2 * C1 + 28 * T1 - 3 * C1**2 + 8 * e1_sq + 24 * T1**2) * D**5 / 120
+
+    lon_rad = lon_origin_rad + (Q5 - Q6 + Q7) / math.cos(fp)
+
+    # Convert from radians to degrees
+    lat = math.degrees(lat_rad)
+    lon = math.degrees(lon_rad)
+
+    # Apply validation if requested
+    if validate:
+        lat_decimal = _validate_coordinate(Decimal(str(lat)), "latitude")
+        lon_decimal = _validate_coordinate(Decimal(str(lon)), "longitude")
+        if lat_decimal is None or lon_decimal is None:
+            raise ValueError("Converted coordinates are outside valid ranges")
+        return float(lat_decimal), float(lon_decimal)
+
+    return lat, lon
+
+
+def parse_utm_coordinate(
+    utm_string: str, validate: bool = True
+) -> tuple[float, float] | None:
+    """
+    Parse UTM coordinate string and return latitude/longitude.
+
+    Supports formats like:
+    - "33N 0594934 5810062"
+    - "18S 0377299 1483035"
+    - "Zone 33N 594934 5810062"
+    - "33N594934E5810062N" (compact format)
+
+    Args:
+        utm_string: UTM coordinate string
+        validate: Whether to validate the resulting coordinates are within valid ranges
+
+    Returns:
+        Tuple of (latitude, longitude) in decimal degrees, or None if parsing fails
+
+    Raises:
+        ValueError: If validation is enabled and coordinates are outside valid ranges
+    """
+    utm_string = utm_string.strip().upper()
+
+    # Valid UTM zone letters (excluding I, O, and X)
+    zone_letters = "CDEFGHJKLMNPQRSTUVW"
+
+    # Pattern 1: Standard format with optional "Zone" prefix
+    # "Zone 33N 594934 5810062" or "33N 594934 5810062"
+    pattern1 = (
+        rf"^(?:ZONE\s+)?(\d{{1,2}})([{zone_letters}])\s+(\d{{6,7}})\s+(\d{{7,8}})$"
+    )
+
+    # Pattern 2: Compact format with E/N suffixes
+    # "33N594934E5810062N"
+    pattern2 = rf"^(\d{{1,2}})([{zone_letters}])(\d{{6,7}})E(\d{{7,8}})N$"
+
+    # Pattern 3: Alternative spacing
+    # "33 N 594934 5810062"
+    pattern3 = (
+        rf"^(?:ZONE\s+)?(\d{{1,2}})\s+([{zone_letters}])\s+(\d{{6,7}})\s+(\d{{7,8}})$"
+    )
+
+    for pattern in [pattern1, pattern2, pattern3]:
+        match = re.match(pattern, utm_string)
+        if match:
+            zone_number = int(match.group(1))
+            zone_letter = match.group(2)
+            easting = float(match.group(3))
+            northing = float(match.group(4))
+
+            try:
+                return utm_to_latlon(
+                    zone_number, zone_letter, easting, northing, validate
+                )
+            except ValueError:
+                # Invalid UTM parameters or validation failed
+                return None
+
+    return None
+
+
+def parse_utm_coordinate_single(
+    utm_string: str, coord_type: str = "latitude", validate: bool = True
+) -> Decimal | None:
+    """
+    Parse UTM coordinate string and return a single coordinate (latitude or longitude).
+
+    This function works similarly to parse_coordinate but for UTM inputs, allowing you
+    to extract just the latitude or longitude from a UTM coordinate string.
+
+    Args:
+        utm_string: UTM coordinate string (e.g., "33N 391545 5819698")
+        coord_type: Type of coordinate to return ('latitude' or 'longitude')
+        validate: Whether to validate the coordinate is within valid ranges
+
+    Returns:
+        Decimal value representing the requested coordinate in decimal degrees,
+        or None if parsing fails
+
+    Raises:
+        ValueError: If validation is enabled and coordinate is outside valid range
+
+    Example:
+        >>> lat = parse_utm_coordinate_single("33N 391545 5819698", "latitude")
+        >>> lon = parse_utm_coordinate_single("33N 391545 5819698", "longitude")
+    """
+    result = parse_utm_coordinate(utm_string, validate)
+    if result is None:
+        return None
+
+    lat, lon = result
+
+    if coord_type.lower() == "longitude":
+        return Decimal(str(lon))
+    else:  # Default to latitude
+        return Decimal(str(lat))
 
 
 def to_dec_deg(*args: float) -> float:

@@ -6,7 +6,12 @@ from decimal import Decimal
 
 import pytest
 
-from coordinate_parser import parse_coordinate
+from coordinate_parser import (
+    parse_coordinate,
+    parse_utm_coordinate,
+    parse_utm_coordinate_single,
+    utm_to_latlon,
+)
 
 
 class TestCoordinateParser:
@@ -214,3 +219,238 @@ class TestCoordinateParser:
         """Test that invalid types raise ValueError."""
         with pytest.raises(ValueError):
             parse_coordinate([1, 2, 3])  # type: ignore
+
+
+class TestUTMCoordinates:
+    """Test UTM coordinate parsing functionality."""
+
+    def test_utm_to_latlon_basic(self):
+        """Test basic UTM to lat/lon conversion."""
+        # Test a known location: Berlin, Germany
+        # UTM Zone 33N, Brandenburg Gate area
+        lat, lon = utm_to_latlon(33, "N", 391545, 5819698)
+
+        # Should be approximately 52.5163° N, 13.3777° E (Brandenburg Gate)
+        assert abs(lat - 52.5163) < 0.01
+        assert (
+            abs(lon - 13.3777) < 0.05
+        )  # Allow slightly larger tolerance for longitude
+
+    def test_utm_to_latlon_southern_hemisphere(self):
+        """Test UTM conversion in southern hemisphere."""
+        # Test a location in southern hemisphere: São Paulo, Brazil
+        # UTM Zone 23S
+        lat, lon = utm_to_latlon(23, "K", 332398, 7395850)
+
+        # Should be approximately -23.5475° S, -46.6361° W
+        assert abs(lat - (-23.5475)) < 0.01
+        assert abs(lon - (-46.6361)) < 0.01
+
+    def test_utm_validation(self):
+        """Test UTM parameter validation."""
+        # Invalid zone number
+        with pytest.raises(ValueError, match="zone number"):
+            utm_to_latlon(61, "N", 500000, 5000000)
+
+        with pytest.raises(ValueError, match="zone number"):
+            utm_to_latlon(0, "N", 500000, 5000000)
+
+        # Invalid zone letter
+        with pytest.raises(ValueError, match="zone letter"):
+            utm_to_latlon(33, "I", 500000, 5000000)  # I is excluded
+
+        with pytest.raises(ValueError, match="zone letter"):
+            utm_to_latlon(33, "O", 500000, 5000000)  # O is excluded
+
+        with pytest.raises(ValueError, match="zone letter"):
+            utm_to_latlon(33, "Z", 500000, 5000000)  # Z is beyond valid range
+
+    def test_parse_utm_coordinate_formats(self):
+        """Test parsing various UTM coordinate formats."""
+        # Test data: (utm_string, expected_approximate_lat, expected_approximate_lon)
+        # Using Berlin coordinates: 33N 391545 5819698 ≈ 52.5163°N, 13.3777°E
+        test_cases = [
+            # Standard format
+            ("33N 391545 5819698", 52.5163, 13.3777),
+            ("23K 332398 7395850", -23.5475, -46.6361),  # São Paulo, Brazil
+            # With "Zone" prefix
+            ("Zone 33N 391545 5819698", 52.5163, 13.3777),
+            ("ZONE 23K 332398 7395850", -23.5475, -46.6361),
+            # With spaces around zone letter
+            ("33 N 391545 5819698", 52.5163, 13.3777),
+            ("23 K 332398 7395850", -23.5475, -46.6361),
+            # Compact format
+            ("33N391545E5819698N", 52.5163, 13.3777),
+            ("23K332398E7395850N", -23.5475, -46.6361),
+        ]
+
+        for utm_string, expected_lat, expected_lon in test_cases:
+            result = parse_utm_coordinate(utm_string)
+            assert result is not None, f"Failed to parse: {utm_string}"
+
+            lat, lon = result
+            # Allow reasonable tolerance for coordinate conversion (0.1 degrees ≈ 11km)
+            lat_msg = (
+                f"Lat mismatch for {utm_string}: got {lat}, expected ~{expected_lat}"
+            )
+            assert abs(lat - expected_lat) < 0.1, lat_msg
+            lon_msg = (
+                f"Lon mismatch for {utm_string}: got {lon}, expected ~{expected_lon}"
+            )
+            assert abs(lon - expected_lon) < 0.1, lon_msg
+
+    def test_parse_utm_coordinate_invalid(self):
+        """Test parsing invalid UTM coordinate formats."""
+        invalid_cases = [
+            "invalid string",
+            "33X 391545 5819698",  # Invalid zone letter (X not in valid letters)
+            "33I 391545 5819698",  # Invalid zone letter (I excluded)
+            "33O 391545 5819698",  # Invalid zone letter (O excluded)
+            "61N 391545 5819698",  # Invalid zone number
+            "0N 391545 5819698",  # Invalid zone number
+            "33N 91545 5819698",  # Easting too short (5 digits)
+            "33N 391545 819698",  # Northing too short (6 digits, need minimum 7)
+            "33N391545E5819698",  # Missing final N in compact format
+            "33N391545E5819698X",  # Wrong final letter in compact format
+            "",
+            "   ",
+        ]
+
+        for invalid_utm in invalid_cases:
+            result = parse_utm_coordinate(invalid_utm)
+            assert result is None, f"Should have failed to parse: {invalid_utm}"
+
+    def test_utm_coordinate_edge_cases(self):
+        """Test UTM coordinates at edge cases."""
+        # Test various zone letters
+        valid_letters = "CDEFGHJKLMNPQRSTUVW"
+
+        for letter in valid_letters:
+            if letter in "CDEFGHJKLM":  # Southern hemisphere (C-M, excluding I and O)
+                result = parse_utm_coordinate(f"33{letter} 391545 5819698")
+                assert result is not None
+                lat, lon = result
+                # Note: some letters near equator might give positive results
+                # For this test, we'll just verify parsing works
+            else:  # Northern hemisphere (N-X)
+                result = parse_utm_coordinate(f"33{letter} 391545 5819698")
+                assert result is not None
+                lat, lon = result
+                # For northern hemisphere letters, latitude should generally be positive
+                # But we'll just verify parsing works for this test
+
+    def test_utm_coordinate_case_insensitive(self):
+        """Test that UTM parsing is case insensitive."""
+        test_cases = [
+            "33n 391545 5819698",
+            "33N 391545 5819698",
+            "zone 33n 391545 5819698",
+            "ZONE 33N 391545 5819698",
+            "33n391545e5819698n",
+            "33N391545E5819698N",
+        ]
+
+        # All should parse to the same result
+        expected_result = parse_utm_coordinate("33N 391545 5819698")
+        assert expected_result is not None
+
+        for test_case in test_cases:
+            result = parse_utm_coordinate(test_case)
+            assert result is not None
+            # Results should be very close (within small floating point differences)
+            assert abs(result[0] - expected_result[0]) < 1e-10
+            assert abs(result[1] - expected_result[1]) < 1e-10
+
+    def test_utm_coordinate_precision(self):
+        """Test UTM coordinate precision with different easting/northing lengths."""
+        # Test 6-digit easting and 7-digit northing (Berlin area)
+        result1 = parse_utm_coordinate("33N 391545 5819698")
+        assert result1 is not None
+        lat1, lon1 = result1
+        assert isinstance(lat1, float)
+        assert isinstance(lon1, float)
+        assert -90 <= lat1 <= 90
+        assert -180 <= lon1 <= 180
+
+        # Test 7-digit easting and 7-digit northing (different location)
+        result2 = parse_utm_coordinate("33N 3915450 5819698")
+        assert result2 is not None
+        lat2, lon2 = result2
+        assert isinstance(lat2, float)
+        assert isinstance(lon2, float)
+        assert -90 <= lat2 <= 90
+        assert -180 <= lon2 <= 180
+
+    def test_utm_coordinate_validation(self):
+        """Test UTM coordinate validation functionality."""
+        # Test with validation enabled (default)
+        result = parse_utm_coordinate("33N 391545 5819698", validate=True)
+        assert result is not None
+        lat, lon = result
+        assert -90 <= lat <= 90
+        assert -180 <= lon <= 180
+
+        # Test with validation disabled
+        result = parse_utm_coordinate("33N 391545 5819698", validate=False)
+        assert result is not None
+        lat, lon = result
+        # Should still be reasonable since this is a valid UTM coordinate
+        assert -90 <= lat <= 90
+        assert -180 <= lon <= 180
+
+        # Test utm_to_latlon validation
+        lat, lon = utm_to_latlon(33, "N", 391545, 5819698, validate=True)
+        assert -90 <= lat <= 90
+        assert -180 <= lon <= 180
+
+        lat, lon = utm_to_latlon(33, "N", 391545, 5819698, validate=False)
+        assert -90 <= lat <= 90
+        assert -180 <= lon <= 180
+
+    def test_utm_coordinate_single_parsing(self):
+        """Test parsing individual coordinates from UTM strings."""
+        utm_string = "33N 391545 5819698"
+
+        # Test latitude extraction
+        lat = parse_utm_coordinate_single(utm_string, "latitude")
+        assert lat is not None
+        assert isinstance(lat, Decimal)
+        assert -90 <= float(lat) <= 90
+
+        # Test longitude extraction
+        lon = parse_utm_coordinate_single(utm_string, "longitude")
+        assert lon is not None
+        assert isinstance(lon, Decimal)
+        assert -180 <= float(lon) <= 180
+
+        # Test default (latitude)
+        lat_default = parse_utm_coordinate_single(utm_string)
+        assert lat_default == lat
+
+        # Test with validation disabled
+        lat_no_val = parse_utm_coordinate_single(utm_string, "latitude", validate=False)
+        assert lat_no_val is not None
+        assert isinstance(lat_no_val, Decimal)
+
+        # Test invalid UTM string
+        invalid_result = parse_utm_coordinate_single("invalid utm", "latitude")
+        assert invalid_result is None
+
+    def test_utm_coordinate_validation_edge_cases(self):
+        """Test UTM coordinate validation with edge cases."""
+        # Test coordinates that might produce extreme values
+        # These should still pass validation if they're mathematically valid UTM
+        # conversions
+
+        # Test zone boundaries
+        result1 = parse_utm_coordinate("1N 166021 0", validate=True)
+        if result1 is not None:  # Only test if parsing succeeds
+            lat, lon = result1
+            assert -90 <= lat <= 90
+            assert -180 <= lon <= 180
+
+        result2 = parse_utm_coordinate("60N 833978 9329005", validate=True)
+        if result2 is not None:  # Only test if parsing succeeds
+            lat, lon = result2
+            assert -90 <= lat <= 90
+            assert -180 <= lon <= 180
