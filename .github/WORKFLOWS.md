@@ -1,4 +1,4 @@
-# GitHub Actions Setup
+# GitHub Actions Workflows
 
 This repository uses a simple 3-workflow CI/CD pipeline:
 
