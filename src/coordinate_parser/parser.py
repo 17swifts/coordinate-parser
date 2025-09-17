@@ -39,14 +39,14 @@ Maritime coordinate formats:
 import math
 import re
 from decimal import Decimal
-from typing import Optional
 
 
-def to_dec_deg(*args) -> float:
+def to_dec_deg(*args: float) -> float:
     """Convert degrees, minutes, seconds to decimal degrees.
 
     Args:
-        *args: Variable arguments representing degrees, minutes (optional), seconds (optional)
+        *args: Variable arguments representing degrees, minutes (optional),
+            seconds (optional)
 
     Returns:
         Decimal degrees as float
@@ -67,7 +67,7 @@ def parse_coordinate(
     string: str | float | Decimal | None,
     coord_type: str = "coordinate",
     validate: bool = True,
-) -> Optional[Decimal]:
+) -> Decimal | None:
     """
     Attempts to parse a latitude or longitude string with optional validation.
 
@@ -91,7 +91,7 @@ def parse_coordinate(
         return None
 
     # Handle numeric types directly
-    if isinstance(string, (float, int, Decimal)):
+    if isinstance(string, float | int | Decimal):
         decimal_result = Decimal(str(string))
         if validate:
             return _validate_coordinate(decimal_result, coord_type)
@@ -107,9 +107,9 @@ def parse_coordinate(
 
     # First, try maritime coordinate patterns (more specific patterns first)
     maritime_patterns = [
-        # Pattern 1: degree-dash-minutes with degree symbol: "40°–41.65'N", "139°-02.54'E"
+        # Pattern 1: degree-dash-minutes with degree symbol: "40°–41.65'N"
         r'^(\d+\.?\d*)°[–\-](\d+\.?\d*)[\'""]?([A-Z])$',
-        # Pattern 2: degree-dash-minutes without degree symbol: "54-05.48N", "162-29.03W"
+        # Pattern 2: degree-dash-minutes without degree symbol: "54-05.48N"
         r"^(\d+\.?\d*)[–\-](\d+\.?\d*)([A-Z])$",
         # Pattern 3: degree-minutes with degree symbol: "30°34.4'N"
         r'^(\d+\.?\d*)°(\d+\.?\d*)[\'""]?([A-Z])$',
@@ -225,8 +225,9 @@ def parse_coordinate(
             if len(parts) >= 3:  # degrees, minutes, seconds
                 if parts[2] >= 60:  # seconds must be < 60
                     raise ValueError("Seconds must be less than 60")
-                # Check for decimal in multiple fields - only invalid if degrees AND minutes both have decimals
-                # (since degrees-minutes-seconds is allowed to have decimals in all fields)
+                # Check for decimal in multiple fields - only invalid if degrees
+                # AND minutes both have decimals (since degrees-minutes-seconds
+                # is allowed to have decimals in all fields)
                 if len(parts) == 2:  # degrees, minutes only
                     decimal_parts = [
                         part_str
@@ -235,7 +236,8 @@ def parse_coordinate(
                     ]
                     if len(decimal_parts) > 1:
                         raise ValueError(
-                            "Decimal values in multiple fields not allowed for degrees-minutes format"
+                            "Decimal values in multiple fields not allowed "
+                            "for degrees-minutes format"
                         )
 
             result = math.copysign(to_dec_deg(*parts), negative)
@@ -263,8 +265,8 @@ def parse_coordinate(
 
 
 def _validate_coordinate(
-    value: Optional[Decimal], coord_type: str = "coordinate"
-) -> Optional[Decimal]:
+    value: Decimal | None, coord_type: str = "coordinate"
+) -> Decimal | None:
     """Validate that a coordinate is within valid ranges.
 
     Args:

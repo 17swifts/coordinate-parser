@@ -2,8 +2,9 @@
 Tests for coordinate_parser module.
 """
 
-import pytest
 from decimal import Decimal
+
+import pytest
 
 from coordinate_parser import parse_coordinate
 
@@ -169,7 +170,7 @@ class TestCoordinateParser:
     def test_parse_numeric_types(self):
         """Test parsing numeric types."""
         assert parse_coordinate(23.43) == Decimal("23.43")
-        assert parse_coordinate(int(45)) == Decimal("45")
+        assert parse_coordinate(45) == Decimal("45")
         assert parse_coordinate(Decimal("12.34")) == Decimal("12.34")
 
     def test_coordinate_validation(self):

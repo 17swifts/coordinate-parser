@@ -1,5 +1,5 @@
 """
-Coordinate Parser - A Python library for parsing geographic coordinates in various formats.
+Coordinate Parser - A Python library for parsing geographic coordinates.
 
 Supports decimal degrees, degrees/minutes/seconds, and maritime coordinate formats.
 """
