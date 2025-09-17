@@ -9,7 +9,10 @@ description = "A Python library for parsing geographic coordinates in various fo
 readme = "README.md"
 license = "MIT"
 authors = [
-    { name = "Shipster", email = "dev@shipster.ai" }
+    { name = "Samantha Swift", email = "s.swift@marcura.com" }
+]
+maintainers = [
+    { name = "Samantha Swift", email = "s.swift@marcura.com" }
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -19,8 +22,11 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: GIS",
     "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Text Processing :: Filters",
+    "Typing :: Typed",
 ]
 keywords = ["coordinates", "latitude", "longitude", "parsing", "gis", "maritime"]
 requires-python = ">=3.11"
@@ -34,14 +40,28 @@ dev = [
     "black>=23.0",
     "ruff>=0.1.0",
 ]
+test = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+]
 
 [project.urls]
-Homepage = "https://github.com/shipster-ai/coordinate-parser"
-Repository = "https://github.com/shipster-ai/coordinate-parser"
-Issues = "https://github.com/shipster-ai/coordinate-parser/issues"
+Homepage = "https://github.com/17swifts/coordinate-parser"
+Repository = "https://github.com/17swifts/coordinate-parser"
+Issues = "https://github.com/17swifts/coordinate-parser/issues"
+Documentation = "https://github.com/17swifts/coordinate-parser#readme"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/coordinate_parser"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "/README.md",
+    "/LICENSE",
+    "/pyproject.toml",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

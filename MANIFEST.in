@@ -1,0 +1,25 @@
+# Include the license file
+include LICENSE
+
+# Include the readme
+include README.md
+
+# Include the pyproject.toml
+include pyproject.toml
+
+# Include all files in the src directory
+recursive-include src *
+
+# Include test files for source distributions
+recursive-include tests *.py
+
+# Exclude compiled Python files
+global-exclude *.pyc
+global-exclude __pycache__
+
+# Exclude development files
+exclude .gitignore
+exclude uv.lock
+exclude .coverage
+exclude htmlcov
+recursive-exclude * .DS_Store

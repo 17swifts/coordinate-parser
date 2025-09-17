@@ -1,5 +1,9 @@
 # Coordinate Parser
 
+[![CI](https://github.com/17swifts/coordinate-parser/actions/workflows/ci.yml/badge.svg)](https://github.com/17swifts/coordinate-parser/actions/workflows/ci.yml)
+[![PyPI version](https://badge.fury.io/py/coordinate-parser.svg)](https://badge.fury.io/py/coordinate-parser)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+
 A robust Python library for parsing geographic coordinates in various formats. This library can handle decimal degrees, degrees/minutes/seconds, and maritime coordinate formats with high precision.
 
 ## Features
